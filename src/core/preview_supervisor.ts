@@ -14,6 +14,7 @@ import {
 } from "./preview_contract.js";
 import { terminateProcessTree } from "./process_tree_kill.js";
 
+import { childEnv } from "./child_env.js";
 function writeState(path: string, state: PreviewState): void {
   const tmp = `${path}.${process.pid}-${randomUUID()}.tmp`;
   try {
@@ -170,7 +171,10 @@ export async function runPreviewSupervisor(launchJson: string): Promise<number> 
       shell: false,
       windowsHide: true,
       detached: process.platform !== "win32",
-      env: { ...process.env, HOST: "127.0.0.1", AETHER_PREVIEW_HOST: "127.0.0.1" },
+      env: childEnv({
+        allow: ["NODE_OPTIONS", "NODE_EXTRA_CA_CERTS"],
+        inject: { HOST: "127.0.0.1", AETHER_PREVIEW_HOST: "127.0.0.1" },
+      }),
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (error) {

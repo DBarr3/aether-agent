@@ -28,6 +28,7 @@ import { daemonPidAlive, readDaemonState } from "../core/device_runtime/daemon_s
 import { checkpointDir } from "../core/device_runtime/paths.js";
 import { buildDeviceDoctorReport, type DoctorProbes } from "../core/device_runtime/doctor.js";
 
+import { childEnv } from "../core/child_env.js";
 export const DEVICE_EXIT = {
   ok: 0,
   usage: 2,
@@ -271,7 +272,7 @@ async function start(ctx: AppContext): Promise<number> {
       detached: process.platform !== "win32",
       windowsHide: true,
       stdio: "ignore",
-      env: { ...process.env, AETHER_DEVICE_RUNTIME: "1" },
+      env: childEnv({ inject: { AETHER_DEVICE_RUNTIME: "1" } }),
     });
     child.unref();
     return out(ctx, "Device daemon started.\n", { started: true });

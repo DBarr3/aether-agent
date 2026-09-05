@@ -21,6 +21,7 @@ import {
 import type { ToolResult } from "./tool_executor.js";
 import { terminateProcessTree } from "./process_tree_kill.js";
 
+import { childEnv } from "./child_env.js";
 /**
  * How the brain subprocess is started. Injected so the local path is testable
  * without a Python installation: LocalBrain speaks a line protocol over stdio,
@@ -73,7 +74,10 @@ export class LocalBrain implements Brain {
       cwd: task.cwd,
       // PYTHONUTF8 belt-and-suspenders alongside the ASCII-escaped wire: the
       // child's stdio never falls back to cp1252 on Windows.
-      env: { ...process.env, PYTHONUTF8: "1", ...(this.opts.env ?? {}) },
+      env: childEnv({
+        allow: ["PYTHONIOENCODING", "PYTHONHOME", "PYTHONPATH"],
+        inject: { PYTHONUTF8: "1", ...(this.opts.env ?? {}) },
+      }),
     });
     this.child = child;
 

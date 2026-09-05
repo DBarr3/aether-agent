@@ -6,6 +6,7 @@ import { LineBuffer, type BrainEvent, type ToolName } from "./brain_protocol.js"
 import type { ToolResult } from "./tool_executor.js";
 import { terminateProcessTree } from "./process_tree_kill.js";
 
+import { childEnv } from "./child_env.js";
 export type BundledChildMode = "ollama" | "selftest";
 
 export interface BundledChildBrainOptions {
@@ -29,7 +30,7 @@ export class BundledChildBrain implements Brain {
     const entry = fileURLToPath(new URL("./headless_brain_child.js", import.meta.url));
     const child = spawn(process.execPath, [entry, this.opts.mode ?? "ollama"], {
       cwd: task.cwd,
-      env: { ...process.env },
+      env: childEnv(),
       detached: process.platform !== "win32",
       windowsHide: true,
       stdio: ["pipe", "pipe", "pipe"],
