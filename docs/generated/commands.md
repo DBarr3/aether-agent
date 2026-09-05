@@ -1,5 +1,5 @@
 <!-- GENERATED FILE: run `npm run docs:generate`; do not edit by hand. -->
-<!-- manifest-digest: sha256:7cff3bb8bc15e3ff28f1701218bf4286128b72b2dbc1e46b05fafbbaae9ed29b -->
+<!-- manifest-digest: sha256:d27209c4f54c59b6dc6a9653dfae44a925c7b1ba4a9e82c24c6e56bf5ba5ff26 -->
 # Generated command reference
 
 This reference is generated from the validated, versioned command manifest. Availability is evaluated at runtime; a listed command may still require authentication, a hosted capability, or local tooling.
@@ -150,11 +150,23 @@ manage authentication
 
 Permission: `account` · Availability: `runtime-dependent` · Telemetry: `shell.auth`
 
-#### `aether github <connect|status|disconnect>`
+#### `aether github <connect|status|disconnect|pr|checks|ci|workflow|action>`
 
-manage the GitHub connection
+manage the GitHub connection and run Cloud GitHub actions
 
 Permission: `account` · Availability: `runtime-dependent` · Telemetry: `shell.github`
+
+Command flags:
+
+- `--project <value>`
+- `--plan <value>`
+- `--approve <value>`
+- `--pr <value>`
+- `--title <value>`
+- `--body-file <value>`
+- `--head <value>`
+- `--base <value>`
+- `--draft`
 
 ### Knowledge
 

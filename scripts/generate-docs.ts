@@ -76,7 +76,7 @@ const INTERNAL_ROUTE = /\/(?:api\/)?internal(?:\/|\b)/i;
 const PRICING_ASSERTION = /(?:[$€£]\s*\d|\b(?:usd|eur|gbp)\b|\b(?:price|pricing|costs?|rates?)\b[^.\n]{0,40}\b(?:token|request|image|video|month|hour)\b|\b\d+(?:\.\d+)?\s*(?:cents?|pence)\s+(?:per|\/)\s+(?:token|request|image|video|month|hour)\b)/i;
 const MARKDOWN_INJECTION = /(?:<\/?[A-Za-z][^>]*>|\[[^\]\n]*\]\([^)]*\)|!\[|`|\*|__|(?:^|[\s(])_[^_\n]+_(?=$|[\s).,;:!?])|^\s{0,3}#{1,6}(?:\s|$))/m;
 const COMMAND_PLACEHOLDERS = new Set([
-  "command", "connect|status|disconnect", "desc|view|start|pause|resume|cancel|complete|note",
+  "command", "connect|status|disconnect", "connect|status|disconnect|pr|checks|ci|workflow|action", "desc|view|start|pause|resume|cancel|complete|note",
   "element", "file", "guidance", "id", "id|all", "id|section", "lang", "login|status|token|refresh|logout",
   "model", "msg", "n", "name", "neo|kronus", "note", "n|id", "order-id", "path", "prompt",
   "q", "section", "subcommand", "tag", "target", "task", "title", "topic", "type", "uvt", "value",
