@@ -851,9 +851,9 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
     "aliases": [],
     "compatibilityAliases": [],
     "deprecatedAliases": [],
-    "args": "<connect|status|disconnect>",
-    "summary": "manage the GitHub connection",
-    "detailedHelp": "aether github <connect|status|disconnect>\nmanage the GitHub connection",
+    "args": "<connect|status|disconnect|pr|checks|ci|workflow|action>",
+    "summary": "manage the GitHub connection and run Cloud GitHub actions",
+    "detailedHelp": "aether github <connect|status|disconnect|pr|checks|ci|workflow|action>\nmanage the GitHub connection and run Cloud GitHub actions.\nCloud actions run under Aether Cloud custody (the backend GitHub App), never your local gh session.\nMutations require the exact stored plan and that action's exact --approve value.",
     "section": "Account",
     "hidden": false,
     "permissionClass": "account",
@@ -898,7 +898,17 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
       "worktree",
       "yes"
     ],
-    "ownedFlags": {},
+    "ownedFlags": {
+      "project": { "type": "string" },
+      "plan": { "type": "string" },
+      "approve": { "type": "string" },
+      "pr": { "type": "string" },
+      "title": { "type": "string" },
+      "body-file": { "type": "string" },
+      "head": { "type": "string" },
+      "base": { "type": "string" },
+      "draft": { "type": "boolean", "default": false }
+    },
     "handler": {
       "id": "handler:shell:github",
       "kind": "host",
@@ -910,7 +920,7 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
       "module": "src/commands/command_manifest_data.ts",
       "symbol": "COMMAND_MANIFEST_SOURCE",
       "target": "github",
-      "usage": "aether github <connect|status|disconnect>",
+      "usage": "aether github <connect|status|disconnect|pr|checks|ci|workflow|action>",
       "visible": true,
       "disposition": "generated"
     },

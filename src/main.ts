@@ -169,7 +169,7 @@ export async function main(argv: string[]): Promise<number> {
     case "auth":
       return cmdAuth(ctx, rest, loginOpts);
     case "github":
-      return cmdGithub(ctx, rest, { noBrowser: Boolean(values["no-browser"]) });
+      return cmdGithub(ctx, rest, { noBrowser: Boolean(values["no-browser"]), json: Boolean(values["json"]) });
     case "vault":
       return cmdVault(ctx, rest);
     case "workflow":
