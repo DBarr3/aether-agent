@@ -1,0 +1,83 @@
+{
+  "schema": "aether.code.completion-vectors/1",
+  "scenarios": [
+    {
+      "id": "terminal-then-exit-success",
+      "events": [
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 1, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "stdout_eof" },
+        { "kind": "process_exit", "exit_code": 0 },
+        { "kind": "containment_empty" },
+        { "kind": "proof_valid" },
+        { "kind": "metering_reconciled" },
+        { "kind": "lease_released" }
+      ],
+      "expected": { "state": "TERMINAL", "outcome": "SUCCEEDED" }
+    },
+    {
+      "id": "exit-callback-before-buffered-terminal",
+      "events": [
+        { "kind": "process_exit", "exit_code": 0 },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 1, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "stdout_eof" },
+        { "kind": "containment_empty" },
+        { "kind": "proof_valid" },
+        { "kind": "metering_reconciled" },
+        { "kind": "lease_released" }
+      ],
+      "expected": { "state": "TERMINAL", "outcome": "SUCCEEDED" }
+    },
+    {
+      "id": "exit-zero-without-terminal",
+      "events": [
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "process_exit", "exit_code": 0 },
+        { "kind": "stdout_eof" },
+        { "kind": "containment_empty" }
+      ],
+      "expected": { "state": "TERMINAL", "outcome": "LOST" }
+    },
+    {
+      "id": "terminal-success-then-nonzero-exit",
+      "events": [
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 1, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "stdout_eof" },
+        { "kind": "process_exit", "exit_code": 1 },
+        { "kind": "containment_empty" },
+        { "kind": "proof_valid" },
+        { "kind": "metering_reconciled" },
+        { "kind": "lease_released" }
+      ],
+      "expected": { "state": "TERMINAL", "outcome": "FAILED" }
+    },
+    {
+      "id": "candidate-waits-for-metering",
+      "events": [
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 1, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "stdout_eof" },
+        { "kind": "process_exit", "exit_code": 0 },
+        { "kind": "containment_empty" },
+        { "kind": "proof_valid" },
+        { "kind": "metering_pending" },
+        { "kind": "lease_retained" }
+      ],
+      "expected": { "state": "FINALIZING" }
+    },
+    {
+      "id": "duplicate-terminal-fails-closed",
+      "events": [
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 0, "correlation_id": "session-alpha", "type": "session", "session": "session-alpha" } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 1, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "exec_frame", "wire": { "protocol": "aether.exec/2", "sequence": 2, "correlation_id": "session-alpha", "type": "terminal", "ok": true, "exit_code": 0 } },
+        { "kind": "stdout_eof" },
+        { "kind": "process_exit", "exit_code": 0 },
+        { "kind": "containment_empty" }
+      ],
+      "expected": { "state": "TERMINAL", "outcome": "LOST" }
+    }
+  ]
+}

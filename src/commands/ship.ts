@@ -313,6 +313,10 @@ export async function runShip(_ctx: AppContext, deps: ShipDeps, flags: ShipFlags
     if (withPr) writeShipRecord(withPr);
   }
   deps.out.write(`${theme.cyan("✔")} PR opened: ${opened.url}\n`);
+  if (process.env["AETHER_PROJECT_MEMORY_RECEIPTS_ENABLED"] === "1") {
+    const { memoryFooter } = await import("../core/project_memory/receipt.js");
+    deps.out.write((await memoryFooter(_ctx)) + "\n");
+  }
   return 0;
 }
 

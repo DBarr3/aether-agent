@@ -1,96 +1,288 @@
-import test from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync, sign } from "node:crypto";
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { canonicalJson, memoryDigest, mergeGraphs, parseGraph, ProjectMemoryWorkingCopy, verifyReceipt,
-  type ProjectGraph, type WorkingCopy } from "../src/core/project_memory.js";
-import { normalizeMemoryArguments } from "../src/commands/project_memory.js";
-import { fileURLToPath } from "node:url";
+import { tmpdir } from "node:os";
+import { buildGraph, git, repositoryRoot } from "../src/core/project_memory/builder.js";
+import { canonical, digest, graphId, type Binding, type Graph, type Manifest, type Receipt, type Remote } from "../src/core/project_memory/contract.js";
+import { ProjectStore } from "../src/core/project_memory/store.js";
+import { pull, push } from "../src/core/project_memory/sync.js";
+import { normalizeMemoryArgs, resolveMemoryBinding } from "../src/commands/project_memory.js";
+import type { ApiClient } from "../src/core/transport.js";
+import { validateGraph, validateManifest } from "../src/core/project_memory/contract.js";
+import { pinMemory } from "../src/core/project_memory/run.js";
+import type { AppContext } from "../src/core/context.js";
+import { dirname } from "node:path";
 
-const project = "prj_0123456789abcdef";
-test("Python-generated graph and signed receipt verify without recanonicalization drift", () => {
-  const fixture = JSON.parse(readFileSync(fileURLToPath(new URL("../../test/fixtures/project-memory.json", import.meta.url)), "utf8"));
-  for (const vector of fixture.vectors) {
-    assert.equal(canonicalJson(vector.value), vector.canonical);
-    assert.equal(memoryDigest(vector.value), vector.digest);
+const project = "prj_12345678";
+test("TypeScript consumes the same canonical contract bytes as Gateway", () => {
+  const vectors = JSON.parse(readFileSync(new URL("../../contracts/project-memory/v1/vectors.json", import.meta.url), "utf8"));
+  validateGraph(vectors.graph, vectors.graph.project_id);
+  validateManifest(vectors.manifest, vectors.graph.project_id);
+  assert.equal(digest(vectors.graph), vectors.graph_digest);
+  assert.equal(digest(vectors.manifest), vectors.manifest_digest);
+  for (const value of vectors.canonical_cases) assert.equal(digest(value.value), value.sha256);
+  for (const patch of [{ schema_version: true }, { parent_commit_ids: [[]] }, { linked_pull_requests: [true] }, { base_revision: 0.5 }, { extra: "data" }]) {
+    assert.throws(() => validateManifest({ ...vectors.manifest, ...patch }, vectors.graph.project_id));
   }
-  assert.equal(memoryDigest(parseGraph(fixture.pack.graph, project)), fixture.pack.checksum);
-  assert.equal(verifyReceipt(fixture.pack.attestation, fixture.keys)["graph_checksum"], fixture.pack.checksum);
 });
-function graph(): ProjectGraph {
-  return { schema_version: "ProjectMemoryGraphV1", project_id: project, graph_id: "pgraph_" + "a".repeat(32),
-    source_sha: "a".repeat(40), source_tree_sha: "b".repeat(40), policy_digest: "c".repeat(64),
-    nodes: [{ id: "file_a", kind: "file", label: "src/main.ts", summary: "", schema_version: 1, locator: null,
-      first_seen_commit: null, last_seen_commit: null, confidence_milli: null, tombstone: false, visibility: "project", sensitivity: "internal",
-      provenance: { producer: "git", source: "repository_verified",
-      evidence_refs: ["d".repeat(64)], policy_digest: "c".repeat(64) } }], edges: [], partial: false, truncation_reasons: [] };
+function fixture(): { root: string; store: ProjectStore; binding: Binding } {
+  const data = mkdtempSync(join(tmpdir(), "apr-memory-"));
+  const fixtureRoot = join(data, "repo"); mkdirSync(fixtureRoot);
+  git(fixtureRoot, ["init"]);
+  // Windows realpath alone can preserve an 8.3 TEMP alias that Git expands.
+  // Resolve through the same Git + realpath seam used before CLI binding.
+  const root = repositoryRoot(fixtureRoot);
+  git(root, ["config", "user.name", "Test"]); git(root, ["config", "user.email", "test@example.invalid"]);
+  git(root, ["remote", "add", "origin", "https://github.com/test/repo.git"]);
+  writeFileSync(join(root, "README.md"), "hello\n");
+  git(root, ["add", "."]); git(root, ["commit", "-m", "fixture"]);
+  const binding = { project_id: project, graph_id: graphId(project), author_principal_id: "owner", root,
+    repository_numeric_id: 17, repository_full_name: "test/repo", binding_digest: "sha256:" + "a".repeat(64) };
+  const store = new ProjectStore(binding, data); store.initialize();
+  return { root, store, binding };
+}
+function commit(store: ProjectStore, root: string, message = "Genesis"): Manifest {
+  const built = buildGraph(root, project);
+  return store.commit(built.graph, built.sourceSha, message)!;
+}
+class Server {
+  head: Remote = { project_id: project, graph_id: graphId(project), commit_id: null, revision: 0, graph_checksum: null };
+  objects = new Map<string, Graph>();
+  commits = new Map<string, { manifest: Manifest; graph: Graph; receipt: Receipt; revision: number }>();
+  writes = 0;
+  loseResponse = false;
+  api = {
+    getJson: async (path: string) => {
+      if (path.endsWith("/head")) return { ...this.head, schema_version: 1, author_principal_id: "owner",
+        binding: { repository_numeric_id: 17, repository_full_name: "test/repo", binding_digest: "sha256:" + "a".repeat(64) } };
+      const id = new URL(path, "https://test.invalid").searchParams.get("commit_id")!;
+      const snapshot = this.commits.get(id);
+      assert.ok(snapshot, `missing commit ${id}`);
+      return { ...snapshot, project_id: project, graph_id: graphId(project), open_url: `https://test.invalid/platform/online/graph?project=${project}&memoryCommit=${id}` };
+    },
+    postJson: async (path: string, body: Record<string, unknown>) => {
+      if (path.endsWith("/packs")) {
+        for (const obj of body["objects"] as { digest: string; value: Graph }[]) { assert.equal(digest(obj.value), obj.digest); this.objects.set(obj.digest, obj.value); }
+        return {};
+      }
+      const m = body["commit_manifest"] as Manifest;
+      assert.equal(body["expected_head_commit_id"], this.head.commit_id);
+      assert.equal(body["expected_revision"], this.head.revision);
+      const graph = this.objects.get(m.graph_checksum)!; assert.ok(graph);
+      this.head = { ...this.head, commit_id: m.commit_id, revision: this.head.revision + 1, graph_checksum: m.graph_checksum };
+      const receipt: Receipt = { ...this.head, commit_id: m.commit_id, schema_version: 1, type: "aether.project_memory.receipt.v1", manifest_digest: digest(m), state: "pushed", signature: "a".repeat(64) };
+      this.commits.set(m.commit_id, { manifest: m, graph, receipt, revision: receipt.revision }); this.writes++;
+      if (this.loseResponse) { this.loseResponse = false; throw new Error("lost response"); }
+      return { receipt };
+    },
+  } as unknown as ApiClient;
 }
 
-test("canonical JSON has Python-compatible number-key order and refuses floats", () => {
-  assert.equal(canonicalJson({ z: [1, "é"], a: true }), '{"a":true,"z":[1,"é"]}');
-  assert.equal(canonicalJson({ "2": "second", "10": "tenth" }), '{"10":"tenth","2":"second"}');
-  for (const value of [1.1, NaN, 9007199254740992, undefined, "\ud800"]) assert.throws(() => canonicalJson(value));
+test("memory parser normalizes only first-position aliases and one action", () => {
+  for (const action of ["commit", "push", "pull", "graph"]) {
+    assert.deepEqual(normalizeMemoryArgs(["-m", action]), ["memory", action]);
+    assert.deepEqual(normalizeMemoryArgs(["-m", `--${action}`]), ["memory", action]);
+  }
+  assert.deepEqual(normalizeMemoryArgs(["code", "-m", "x"]), ["code", "-m", "x"]);
+  assert.deepEqual(normalizeMemoryArgs(["--memory-graph", "--no-open"]), ["memory", "graph", "--no-open"]);
+  assert.throws(() => normalizeMemoryArgs(["-m", "--push", "--pull"]));
 });
 
-test("memory group aliases never reinterpret code -m", () => {
-  assert.deepEqual(normalizeMemoryArguments(["-m", "commit", "-m", "verified changes"]), ["memory", "commit", "--message", "verified changes"]);
-  assert.deepEqual(normalizeMemoryArguments(["code", "-m", "model"]), ["code", "-m", "model"]);
-  assert.deepEqual(normalizeMemoryArguments(["m", "--push"]), ["memory", "push"]);
-  assert.throws(() => normalizeMemoryArguments(["memory", "--push", "--pull"]));
+test("canonical JSON rejects floats and lone surrogates and sorts keys", () => {
+  assert.equal(canonical({ z: "café", a: 1 }), '{"a":1,"z":"café"}');
+  for (const value of [NaN, Infinity, 1.1, 9007199254740992, "\ud800", { "bad-key": 1 }]) assert.throws(() => canonical(value));
 });
 
-test("untrusted project identity, dangling edges, and secret content fail closed", () => {
-  const value = graph();
-  assert.equal(parseGraph(value, project), value);
-  assert.throws(() => parseGraph(value, "prj_foreign"));
-  assert.throws(() => parseGraph({ ...value, unexpected: true }, project));
-  assert.throws(() => parseGraph({ ...value, edges: [{ id: "edge_1", kind: "contains", source: "foreign", target: "file_a", provenance: value.nodes[0]!["provenance"] }] }, project));
-  value.nodes[0]!["summary"] = "sk-proj-" + "SECRETCANARY".repeat(5);
-  assert.throws(() => parseGraph(value, project));
+test("deterministic Git builder excludes secrets, ignored and binary files without source contents", () => {
+  const { root } = fixture();
+  writeFileSync(join(root, ".env"), "SENTINEL_CREDENTIAL=unsafe");
+  writeFileSync(join(root, ".gitignore"), "ignored.txt\nnested/*\n!nested/.gitignore\n!nested/keep.txt\n");
+  writeFileSync(join(root, "ignored.txt"), "ignored"); writeFileSync(join(root, "file.png"), Buffer.alloc(20));
+  mkdirSync(join(root, "nested"));
+  writeFileSync(join(root, "nested", ".gitignore"), "*.tmp\n!important.tmp\n");
+  writeFileSync(join(root, "nested", "drop.txt"), "ignored"); writeFileSync(join(root, "nested", "keep.txt"), "visible");
+  writeFileSync(join(root, "nested", "drop.tmp"), "ignored"); writeFileSync(join(root, "nested", "important.tmp"), "visible");
+  git(root, ["add", "-f", ".env", ".gitignore", "ignored.txt", "file.png", "nested/.gitignore", "nested/drop.txt", "nested/keep.txt", "nested/drop.tmp", "nested/important.tmp"]); git(root, ["commit", "-m", "fixtures"]);
+  // Dirty and machine-local ignore inputs must not change immutable HEAD.
+  writeFileSync(join(root, ".gitignore"), "README.md\n");
+  writeFileSync(join(root, ".git", "info", "exclude"), "README.md\n");
+  const excludes = join(dirname(root), "machine-excludes");
+  writeFileSync(excludes, "README.md\n");
+  git(root, ["config", "core.excludesFile", excludes]);
+  const first = buildGraph(root, project), second = buildGraph(root, project);
+  assert.equal(digest(first.graph), digest(second.graph));
+  assert.ok(!canonical(first.graph).includes("SENTINEL_CREDENTIAL"));
+  const locators = first.graph.nodes.map((n) => n["locator"]);
+  assert.ok(!locators.includes(".env") && !locators.includes("ignored.txt") && !locators.includes("file.png"));
+  assert.ok(!locators.includes("nested/drop.txt"));
+  assert.ok(!locators.includes("nested/drop.tmp"));
+  assert.ok(locators.includes("nested/keep.txt"));
+  assert.ok(locators.includes("nested/important.tmp"));
+  assert.ok(locators.includes("README.md"));
 });
 
-test("only disjoint entity edits auto-merge; delete/update remains a conflict", () => {
-  const base = graph(), local = structuredClone(base), remote = structuredClone(base);
-  local.nodes.push({ ...local.nodes[0]!, id: "file_b" });
-  remote.nodes.push({ ...remote.nodes[0]!, id: "file_c" });
-  assert.equal(mergeGraphs(base, local, remote).graph?.nodes.length, 3);
-  local.nodes = [];
-  remote.nodes[0]!["label"] = "changed";
-  const conflict = mergeGraphs(base, local, remote);
-  assert.equal(conflict.graph, null);
-  assert.equal(conflict.conflicts[0]!.id, "file_a");
+test("local commit and immutable objects work with no network and detect corruption", async () => {
+  const { root, store } = fixture();
+  const manifest = await store.locked(() => commit(store, root));
+  assert.equal(store.state().head, manifest.commit_id); assert.equal(store.state().remote.revision, 0);
+  assert.equal(store.history().length, 1);
+  assert.equal(store.commit(buildGraph(root, project).graph, manifest.source_sha, "unchanged"), null);
+  writeFileSync(join(store.base, "objects", manifest.graph_checksum + ".json"), "{}");
+  assert.throws(() => store.manifest(manifest.commit_id), /integrity/);
 });
 
-test("receipt signatures bind every field and reject key substitution", () => {
-  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
-  const payload = { schema_version: "ProjectMemoryReceiptV1", project_id: project, new_revision: 1 };
-  const signature = sign(null, Buffer.from(canonicalJson({ key_id: "memory", payload })), privateKey).toString("base64");
-  const key = publicKey.export({ type: "spki", format: "der" }).subarray(-32).toString("base64");
-  assert.deepEqual(verifyReceipt({ key_id: "memory", payload, signature }, { memory: key }), payload);
-  assert.throws(() => verifyReceipt({ key_id: "memory", payload: { ...payload, new_revision: 2 }, signature }, { memory: key }));
-  assert.throws(() => verifyReceipt({ key_id: "foreign", payload, signature }, { memory: key }));
+test("worktrees have independent heads and operation locks exclude racing writers", async () => {
+  const { root, store, binding } = fixture();
+  await store.locked(async () => {
+    await assert.rejects(store.locked(() => 1), /locked/);
+    commit(store, root);
+  });
+  const other = new ProjectStore({ ...binding, root: root + "-worktree" });
+  assert.notEqual(other.workspace, store.workspace);
+  assert.equal(other.state().head, null);
 });
 
-test("local atomic working copy detects corruption without overwriting unpushed work", () => {
-  const root = mkdtempSync(join(tmpdir(), "aether-project-memory-"));
+test("push then second-device pull preserves exact revision and receipt", async () => {
+  const first = fixture(), second = fixture(), server = new Server();
+  const originalGit = git(first.root, ["rev-parse", "HEAD"]);
+  const m = await first.store.locked(() => commit(first.store, first.root));
+  await first.store.locked(() => push(first.store, server.api));
+  await second.store.locked(() => pull(second.store, server.api));
+  assert.equal(second.store.state().head, m.commit_id);
+  assert.equal(second.store.state().receipt?.revision, 1);
+  assert.equal(git(first.root, ["rev-parse", "HEAD"]), originalGit);
+});
+
+test("runtime pins never assign an older server revision to unpublished local content", async () => {
+  const { root, store } = fixture(), server = new Server();
+  const previous = process.env["AETHER_CONFIG_DIR"];
+  process.env["AETHER_CONFIG_DIR"] = dirname(root);
   try {
-    const copy = new ProjectMemoryWorkingCopy(project, root, join(root, "private-data"));
-    const value = graph();
-    const head = { schema_version: "ProjectMemoryRefV1" as const, project_id: project, graph_id: value.graph_id,
-      commit_id: "memc_" + "e".repeat(40), revision: 1, checksum: memoryDigest(value), manifest_checksum: "f".repeat(64),
-      source_sha: value.source_sha, cas_token: "0".repeat(64) };
-    const state: WorkingCopy = { schema_version: "ProjectMemoryWorkingCopyV1", project_id: project, root,
-      remote_identity: "org/repo", base: head, base_graph: value, graph: value, candidate: null,
-      conflicts: [], evidence_receipts: [], journal: [{ operation: "init" }] };
-    copy.write(state);
-    assert.deepEqual(copy.read(), state);
-    assert.throws(() => copy.write(state), /stale_state/);
-    const file = join(copy.directory, "index.json");
-    const raw = readFileSync(file, "utf8").replace("src/main.ts", "poison.ts");
-    writeFileSync(file, raw);
-    assert.throws(() => copy.read(), /integrity_failure/);
-    assert.equal(readFileSync(file, "utf8"), raw);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    const ctx = { flags: { cwd: root } } as AppContext;
+    assert.equal(repositoryRoot(root), root, "runtime and fixture must use the same canonical repository root");
+    assert.deepEqual(resolveMemoryBinding(ctx), store.binding, "runtime must locate the fixture binding before pinning it");
+    assert.equal(pinMemory(ctx)?.graph_revision, null);
+    const first = commit(store, root);
+    assert.equal(pinMemory(ctx)?.commit_id, first.commit_id);
+    assert.equal(pinMemory(ctx)?.graph_revision, null);
+    await store.locked(() => push(store, server.api));
+    assert.equal(pinMemory(ctx)?.graph_revision, 1);
+    const frozen = pinMemory(ctx)!;
+    writeFileSync(join(root, "next.ts"), "export const next = 1;\n");
+    git(root, ["add", "."]); git(root, ["commit", "-m", "next"]);
+    const second = commit(store, root);
+    const local = pinMemory(ctx)!;
+    assert.equal(local.commit_id, second.commit_id);
+    assert.equal(local.graph_checksum, second.graph_checksum);
+    assert.equal(local.graph_revision, null);
+    assert.equal(frozen.commit_id, first.commit_id);
+    assert.equal(frozen.graph_revision, 1);
+    assert.ok(Object.isFrozen(frozen));
+  } finally {
+    if (previous === undefined) delete process.env["AETHER_CONFIG_DIR"];
+    else process.env["AETHER_CONFIG_DIR"] = previous;
+  }
+});
+
+test("runtime pins reject a stale repository, project, or Desktop owner binding", () => {
+  const { root, store } = fixture();
+  const keys = ["AETHER_CONFIG_DIR", "AETHER_PROJECT_ID", "AETHER_PROJECT_MEMORY_OWNER_ID"];
+  const saved = keys.map((key) => process.env[key]);
+  process.env["AETHER_CONFIG_DIR"] = dirname(root);
+  delete process.env["AETHER_PROJECT_ID"]; delete process.env["AETHER_PROJECT_MEMORY_OWNER_ID"];
+  try {
+    commit(store, root);
+    const ctx = { flags: { cwd: root } } as AppContext;
+    assert.equal(repositoryRoot(root), root, "runtime and fixture must use the same canonical repository root");
+    assert.deepEqual(resolveMemoryBinding(ctx), store.binding, "runtime must locate the fixture binding before pinning it");
+    assert.ok(pinMemory(ctx));
+    process.env["AETHER_PROJECT_MEMORY_OWNER_ID"] = "another-owner";
+    assert.equal(pinMemory(ctx), null);
+    delete process.env["AETHER_PROJECT_MEMORY_OWNER_ID"];
+    process.env["AETHER_PROJECT_ID"] = "prj_other123";
+    assert.equal(pinMemory(ctx), null);
+    delete process.env["AETHER_PROJECT_ID"];
+    git(root, ["remote", "set-url", "origin", "https://github.com/test/other.git"]);
+    assert.equal(pinMemory(ctx), null);
+  } finally {
+    keys.forEach((key, i) => { if (saved[i] === undefined) delete process.env[key]; else process.env[key] = saved[i]; });
+  }
+});
+
+test("two-device divergence preserves both commits and rejects overwrite", async () => {
+  const first = fixture(), second = fixture(), server = new Server();
+  await first.store.locked(() => commit(first.store, first.root));
+  const local = await second.store.locked(() => commit(second.store, second.root));
+  await first.store.locked(() => push(first.store, server.api));
+  await assert.rejects(second.store.locked(() => push(second.store, server.api)), /head_conflict/);
+  await assert.rejects(second.store.locked(() => pull(second.store, server.api)), /head_conflict/);
+  assert.equal(second.store.state().head, local.commit_id);
+  assert.equal(server.writes, 1);
+});
+
+test("lost acknowledgment during a multi-commit push resumes without duplication", async () => {
+  const { root, store } = fixture(), server = new Server();
+  await store.locked(() => commit(store, root));
+  writeFileSync(join(root, "next.txt"), "next"); git(root, ["add", "."]); git(root, ["commit", "-m", "next"]);
+  const last = await store.locked(() => commit(store, root, "Next"));
+  server.loseResponse = true;
+  await assert.rejects(store.locked(() => push(store, server.api)), /lost response/);
+  assert.equal(store.state().remote.revision, 0);
+  await store.locked(() => push(store, server.api));
+  assert.equal(store.state().remote.commit_id, last.commit_id);
+  assert.equal(store.state().remote.revision, 2); assert.equal(server.writes, 2);
+  await store.locked(() => push(store, server.api)); assert.equal(server.writes, 2);
+});
+
+test("dirty index prevents remote overwrite and corrupt state never resets to empty", async () => {
+  const first = fixture(), second = fixture(), server = new Server();
+  await first.store.locked(() => commit(first.store, first.root)); await first.store.locked(() => push(first.store, server.api));
+  await second.store.locked(() => {
+    const index = second.store.object(buildGraph(second.root, project).graph);
+    second.store.save({ ...second.store.state(), index });
+  });
+  await assert.rejects(second.store.locked(() => pull(second.store, server.api)), /dirty/);
+  assert.equal(second.store.state().head, null);
+  const statePath = join(second.store.workspace, "state.json");
+  const saved = readFileSync(statePath, "utf8"); writeFileSync(statePath, "{");
+  assert.throws(() => second.store.state(), /integrity/);
+  writeFileSync(statePath, saved);
+});
+
+test("complete scans tombstone removals, retain first-seen history, and unchanged commits are no-ops", async () => {
+  const { root, store } = fixture();
+  const first = await store.locked(() => commit(store, root));
+  assert.equal(await store.locked(() => commit(store, root)), null);
+  git(root, ["rm", "README.md"]); git(root, ["commit", "-m", "remove"]);
+  const next = await store.locked(() => commit(store, root, "Remove README"));
+  const graph = store.graph(next.graph_checksum);
+  const removed = graph.nodes.find((n) => n["locator"] === "README.md")!;
+  assert.equal(removed.tombstone, true);
+  assert.equal(removed["first_seen_commit"], first.commit_id);
+  assert.equal(removed["last_seen_commit"], next.commit_id);
+  assert.equal(await store.locked(() => commit(store, root)), null);
+});
+
+test("pull merges disjoint semantic IDs and retains the original local branch", async () => {
+  const a = fixture(), b = fixture(), server = new Server();
+  await a.store.locked(() => commit(a.store, a.root));
+  await a.store.locked(() => push(a.store, server.api));
+  await b.store.locked(() => pull(b.store, server.api));
+  const add = (store: ProjectStore, id: string) => {
+    const built = buildGraph(store.binding.root, project);
+    built.graph.nodes.push({ ...built.graph.nodes[0]!, id, kind: "decision", summary: id });
+    built.graph.nodes.sort((x, y) => x.id < y.id ? -1 : 1);
+    return store.commit(built.graph, built.sourceSha, "Decision")!;
+  };
+  await a.store.locked(() => add(a.store, "node_decision_a"));
+  const oldLocal = await b.store.locked(() => add(b.store, "node_decision_b"));
+  await a.store.locked(() => push(a.store, server.api));
+  assert.equal(await b.store.locked(() => pull(b.store, server.api)), "local");
+  assert.ok(b.store.hasCommit(oldLocal.commit_id));
+  const current = b.store.manifest(b.store.state().head!);
+  assert.equal(current.parent_commit_ids[0], server.head.commit_id);
+  assert.deepEqual(b.store.graph(current.graph_checksum).nodes.filter((e) => e.kind === "decision").map((e) => e.id), ["node_decision_a", "node_decision_b"]);
+  await b.store.locked(() => push(b.store, server.api));
+  assert.equal(server.head.revision, 3);
 });

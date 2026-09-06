@@ -1,4 +1,5 @@
 import type { Writable } from "node:stream";
+import { cmdProjectMemory, projectStatus, type ProjectMemoryOptions } from "./project_memory.js";
 import type { AppContext } from "../core/context.js";
 import { chooseBackend } from "../core/backend.js";
 import {
@@ -16,12 +17,7 @@ import {
 export interface MemoryCommandOptions {
   out?: Writable;
   apply?: boolean;
-  project?: string;
-  offline?: boolean;
-  noOpen?: boolean;
-  message?: string;
-  graphFile?: string;
-  evidenceFile?: string;
+  projectMemory?: ProjectMemoryOptions;
 }
 
 // Mirrors the MemoryTier union in ../core/memory.ts and the error text
@@ -90,15 +86,11 @@ export async function cmdMemory(
 ): Promise<number> {
   const out = options.out ?? process.stdout;
   const sub = (argv[0] ?? "status").toLowerCase();
-  if (!["inspect", "forget", "prune"].includes(sub) &&
-      (sub !== "status" || options.project || process.env["AETHER_PROJECT_ID"])) {
-    const { cmdProjectMemory } = await import("./project_memory.js");
-    return cmdProjectMemory(ctx, argv, options);
-  }
   try {
     if (sub === "status") {
-      const report = await reportForContext(ctx);
-      out.write(ctx.flags.json ? JSON.stringify(report) + "\n" : renderStatus(report));
+      const report = await reportForContext(options.projectMemory?.offline ? { ...ctx, flags: { ...ctx.flags, local: true } } : ctx);
+      const project = projectStatus(ctx, options.projectMemory);
+      out.write(ctx.flags.json ? JSON.stringify({ ...report, project_graph: project }) + "\n" : renderStatus(report) + `Project Graph: ${project["state"]}\n`);
       return 0;
     }
     if (sub === "inspect") {
@@ -153,6 +145,9 @@ export async function cmdMemory(
         out.write("QOPC account memory is never automatically pruned by the terminal.\n");
       }
       return result.failures.length ? 1 : 0;
+    }
+    if (["init", "diff", "commit", "push", "pull", "sync", "log", "show", "graph", "reconcile"].includes(sub)) {
+      return cmdProjectMemory(ctx, argv, { ...options.projectMemory, out });
     }
     throw new Error(
       "usage: aether memory [status|inspect <tier>|forget <tier> <id>|prune <days> [--apply]]",

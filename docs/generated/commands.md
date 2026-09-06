@@ -1,5 +1,5 @@
 <!-- GENERATED FILE: run `npm run docs:generate`; do not edit by hand. -->
-<!-- manifest-digest: sha256:73d681e88a49ca154b37ab5d4f29d87d808c2324a70b037ae036a2f9ee530428 -->
+<!-- manifest-digest: sha256:7a10b8ff538bf0bb2872c51dbb4ed85fb21fc8cd9243cd1baac7b14035d681c3 -->
 # Generated command reference
 
 This reference is generated from the validated, versioned command manifest. Availability is evaluated at runtime; a listed command may still require authentication, a hosted capability, or local tooling.
@@ -182,11 +182,22 @@ create and manage workflows
 
 Permission: `network` · Availability: `runtime-dependent` · Telemetry: `shell.workflow` · Requires: `aether.hosted`
 
-#### `aether memory [init|status|diff|stage|commit|push|pull|log|graph|sync|show|reconcile|inspect|forget|prune]`
+#### `aether memory [init|status|diff|commit|push|pull|sync|log|show|graph|reconcile|inspect|forget|prune]`
 
-manage project knowledge and personal memory
+commit and synchronize project memory; inspect memory tiers
 
 Permission: `local-write` · Availability: `runtime-dependent` · Telemetry: `shell.memory` · Aliases: `aether m`
+
+Command flags:
+
+- `--project <value>`
+- `--offline`
+- `--no-open`
+- `-m, --message <value>`
+- `--link-git <value>`
+- `--link-pr <value>`
+- `--push`
+- `--against <value>`
 
 #### `aether skills <subcommand>`
 

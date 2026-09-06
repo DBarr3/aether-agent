@@ -1090,9 +1090,9 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
     "aliases": ["m"],
     "compatibilityAliases": ["m"],
     "deprecatedAliases": [],
-    "args": "[init|status|diff|stage|commit|push|pull|log|graph|sync|show|reconcile|inspect|forget|prune]",
-    "summary": "manage project knowledge and personal memory",
-    "detailedHelp": "aether memory <action> --project <project-id>\nInitialize, inspect, stage, commit and synchronize verified Project Memory. Use --json for stable output, --offline for local status/log, and --no-open for a graph link.\nAliases: aether m; first-command aether -m; memory --push/--pull/--commit/--graph.\nStage and reconcile use --graph-file and --evidence-file. Commit uses --message (or memory commit -m). Push performs an evidence-gated cloud compare-and-set; a local commit does not push.\nPersonal memory remains available through status without a project, inspect, forget and prune.",
+    "args": "[init|status|diff|commit|push|pull|sync|log|show|graph|reconcile|inspect|forget|prune]",
+    "summary": "commit and synchronize project memory; inspect memory tiers",
+    "detailedHelp": "aether memory [init|status|diff|commit|push|pull|sync|log|show|graph|reconcile|inspect|forget|prune]\nUse aether -m commit --message <text>, aether -m push, or aether --memory-graph.\nProject init needs --project <canonical-id>. Local commits work offline. Memory push never pushes Git.\n--offline --no-open --link-git <ref> --link-pr <number> --against remote --json",
     "section": "Knowledge",
     "hidden": false,
     "permissionClass": "local-write",
@@ -1137,7 +1137,16 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
       "worktree",
       "yes"
     ],
-    "ownedFlags": {},
+    "ownedFlags": {
+      "project": { "type": "string" },
+      "offline": { "type": "boolean" },
+      "no-open": { "type": "boolean", "default": false },
+      "message": { "type": "string", "short": "m" },
+      "link-git": { "type": "string" },
+      "link-pr": { "type": "string" },
+      "push": { "type": "boolean" },
+      "against": { "type": "string" }
+    },
     "handler": {
       "id": "handler:shell:memory",
       "kind": "host",
@@ -1149,7 +1158,7 @@ export const COMMAND_MANIFEST_SOURCE: readonly CommandManifestEntry[] = [
       "module": "src/commands/command_manifest_data.ts",
       "symbol": "COMMAND_MANIFEST_SOURCE",
       "target": "memory",
-      "usage": "aether memory [init|status|diff|stage|commit|push|pull|log|graph|sync|show|reconcile|inspect|forget|prune]",
+      "usage": "aether memory [init|status|diff|commit|push|pull|sync|log|show|graph|reconcile|inspect|forget|prune]",
       "visible": true,
       "disposition": "generated"
     },

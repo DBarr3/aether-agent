@@ -26,9 +26,6 @@ export const CLI_SECTIONS = [...new Set(shellManifest.map((entry) => entry.secti
  * time: a command that shadows a global is a startup error, not a surprise.
  */
 export const GLOBAL_FLAGS: FlagTable = {
-  offline: { type: "boolean", default: false },
-  "graph-file": { type: "string" },
-  "evidence-file": { type: "string" },
   model: { type: "string" },
   agent: { type: "string" },
   cwd: { type: "string" },
@@ -288,7 +285,7 @@ const registryErrors = [
 if (registryErrors.length) throw new Error(`Invalid CLI registry: ${registryErrors.join("; ")}`);
 
 /** The single `parseArgs` options object: globals plus every command's flags. */
-export const CLI_PARSE_OPTIONS = mergeFlagTables(GLOBAL_FLAGS, DISPATCH_COMMANDS);
+export const CLI_PARSE_OPTIONS = mergeFlagTables(GLOBAL_FLAGS, shellManifest.map((entry) => ({ flags: entry.ownedFlags })));
 
 export const findDispatchedCliCommand = (name: string): DispatchedCommand | undefined =>
   findDispatchedCommand(DISPATCH_COMMANDS, name);

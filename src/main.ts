@@ -4,6 +4,7 @@
 // and signing (Aether audit) happen server-side on Aether's servers.
 
 import { parseArgs } from "node:util";
+import { normalizeMemoryArgs } from "./commands/project_memory.js";
 import { createInterface } from "node:readline";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
@@ -74,15 +75,18 @@ function suggestTopLevel(token: string): string | null {
 }
 
 export async function main(argv: string[]): Promise<number> {
-  const { normalizeMemoryArguments } = await import("./commands/project_memory.js");
-  argv = normalizeMemoryArguments(argv);
   const nodeError = unsupportedNodeMessage(process.versions.node);
   if (nodeError) {
     process.stderr.write(`${errTheme.red("✗")} ${nodeError}\n`);
     return 1;
   }
+  let normalized: string[];
+  try { normalized = normalizeMemoryArgs(argv); } catch {
+    process.stdout.write(argv.includes("--json") ? JSON.stringify({ schema_version: 1, state: "not committed", code: "project_memory_invalid_action_flags" }) + "\n" : "Project memory: choose one action.\n");
+    return 2;
+  }
   const { values, positionals } = parseArgs({
-    args: argv,
+    args: normalized,
     allowPositionals: true,
     strict: false,
     // Globals plus every dispatch-table command's flags — one flat namespace,
@@ -190,11 +194,14 @@ export async function main(argv: string[]): Promise<number> {
       const { cmdCapabilities } = await import("./commands/capabilities.js");
       return cmdCapabilities(ctx, rest, { available: Boolean(values["available"]) });
     }
-    case "memory": {
+    case "memory":
+    case "m": {
       const { cmdMemory } = await import("./commands/memory.js");
-      return cmdMemory(ctx, rest, { apply: Boolean(values["apply"]), project: sf(values["project"]),
-        offline: Boolean(values["offline"]), noOpen: Boolean(values["no-open"]), message: sf(values["message"]),
-        graphFile: sf(values["graph-file"]), evidenceFile: sf(values["evidence-file"]) });
+      return cmdMemory(ctx, rest, { apply: Boolean(values["apply"]), projectMemory: {
+        project: sf(values["project"]), offline: Boolean(values["offline"]), noOpen: Boolean(values["no-open"]),
+        message: sf(values["message"]), linkGit: sf(values["link-git"]), linkPr: sf(values["link-pr"]),
+        push: Boolean(values["push"]), against: sf(values["against"]),
+      } });
     }
     case "image":
     case "img":
