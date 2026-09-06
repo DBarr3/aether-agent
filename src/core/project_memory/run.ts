@@ -1,6 +1,7 @@
 import type { AppContext } from "../context.js";
 import { buildGraph, repositoryRoot } from "./builder.js";
-import { cachedBinding, ProjectStore } from "./store.js";
+import { ProjectStore } from "./store.js";
+import { resolveMemoryBinding } from "../../commands/project_memory.js";
 import { memoryApi } from "./network.js";
 import { memoryFooter } from "./receipt.js";
 import { push } from "./sync.js";
@@ -8,7 +9,7 @@ import { push } from "./sync.js";
 /** Host pins a local revision once; subsequent commits cannot rewrite it. */
 export function pinMemory(ctx: AppContext): Readonly<{ project_id: string; commit_id: string | null; graph_revision: number | null; graph_checksum: string | null }> | null {
   try {
-    const binding = cachedBinding(repositoryRoot(ctx.flags.cwd));
+    const binding = resolveMemoryBinding(ctx);
     if (!binding) return null;
     const store = new ProjectStore(binding), state = store.state();
     // Revisions belong to a specific server commit, never to its local child.
@@ -20,7 +21,7 @@ export function pinMemory(ctx: AppContext): Readonly<{ project_id: string; commi
 export async function completeMemory(ctx: AppContext, pinned: ReturnType<typeof pinMemory>, succeeded: boolean): Promise<string> {
   try {
     if (!succeeded) return "Memory  not committed (coding run did not pass verification)";
-    const root = repositoryRoot(ctx.flags.cwd), binding = cachedBinding(root);
+    const root = repositoryRoot(ctx.flags.cwd), binding = resolveMemoryBinding(ctx);
     if (binding?.policy?.auto_commit && binding.policy.local_builder && pinned && pinned.project_id === binding.project_id) {
       const store = new ProjectStore(binding);
       await store.locked(async () => {

@@ -169,6 +169,29 @@ test("runtime pins never assign an older server revision to unpublished local co
   }
 });
 
+test("runtime pins reject a stale repository, project, or Desktop owner binding", () => {
+  const { root, store } = fixture();
+  const keys = ["AETHER_CONFIG_DIR", "AETHER_PROJECT_ID", "AETHER_PROJECT_MEMORY_OWNER_ID"];
+  const saved = keys.map((key) => process.env[key]);
+  process.env["AETHER_CONFIG_DIR"] = dirname(root);
+  delete process.env["AETHER_PROJECT_ID"]; delete process.env["AETHER_PROJECT_MEMORY_OWNER_ID"];
+  try {
+    commit(store, root);
+    const ctx = { flags: { cwd: root } } as AppContext;
+    assert.ok(pinMemory(ctx));
+    process.env["AETHER_PROJECT_MEMORY_OWNER_ID"] = "another-owner";
+    assert.equal(pinMemory(ctx), null);
+    delete process.env["AETHER_PROJECT_MEMORY_OWNER_ID"];
+    process.env["AETHER_PROJECT_ID"] = "prj_other123";
+    assert.equal(pinMemory(ctx), null);
+    delete process.env["AETHER_PROJECT_ID"];
+    git(root, ["remote", "set-url", "origin", "https://github.com/test/other.git"]);
+    assert.equal(pinMemory(ctx), null);
+  } finally {
+    keys.forEach((key, i) => { if (saved[i] === undefined) delete process.env[key]; else process.env[key] = saved[i]; });
+  }
+});
+
 test("two-device divergence preserves both commits and rejects overwrite", async () => {
   const first = fixture(), second = fixture(), server = new Server();
   await first.store.locked(() => commit(first.store, first.root));

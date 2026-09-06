@@ -31,7 +31,7 @@ export function normalizeMemoryArgs(argv: string[]): string[] {
   }
   return args;
 }
-function resolveBinding(ctx: AppContext, options: ProjectMemoryOptions): Binding | null {
+export function resolveMemoryBinding(ctx: AppContext, options: ProjectMemoryOptions = {}): Binding | null {
   const root = repositoryRoot(ctx.flags.cwd);
   const binding = cachedBinding(root);
   if (binding) {
@@ -45,7 +45,7 @@ function resolveBinding(ctx: AppContext, options: ProjectMemoryOptions): Binding
 }
 export function projectStatus(ctx: AppContext, options: ProjectMemoryOptions = {}): Record<string, unknown> {
   try {
-    const binding = resolveBinding(ctx, options);
+    const binding = resolveMemoryBinding(ctx, options);
     if (!binding) return { schema_version: 1, state: "uninitialized", code: "project_binding_required" };
     const store = new ProjectStore(binding);
     const state = store.state();
@@ -74,7 +74,7 @@ export async function cmdProjectMemory(ctx: AppContext, argv: string[], options:
     ctx = { ...ctx, api: memoryApi(ctx) };
     if (sub === "status") { out.write(canonical(projectStatus(ctx, options)) + "\n"); return 0; }
     const root = repositoryRoot(ctx.flags.cwd);
-    let binding = resolveBinding(ctx, options);
+    let binding = resolveMemoryBinding(ctx, options);
     if (sub === "init" && !options.offline) {
       const project = options.project ?? process.env["AETHER_PROJECT_ID"] ?? binding?.project_id;
       requireMemory(project, "project_binding_required");
