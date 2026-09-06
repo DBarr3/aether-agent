@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "author_principal_id": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "base_revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "builder_version": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "change_summary": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "commit_id": {
+      "pattern": "^memc_[A-Za-z0-9_-]{8,80}$",
+      "type": "string"
+    },
+    "created_at": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "device_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "graph_checksum": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "graph_id": {
+      "pattern": "^pgraph_[A-Za-z0-9_-]{8,80}$",
+      "type": "string"
+    },
+    "linked_git_commits": {
+      "items": {
+        "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$",
+        "type": "string"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "linked_pull_requests": {
+      "items": {
+        "maximum": 9007199254740991,
+        "minimum": 1,
+        "type": "integer"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
+    "message": {
+      "maxLength": 2048,
+      "minLength": 1,
+      "type": "string"
+    },
+    "parent_commit_ids": {
+      "items": {
+        "pattern": "^memc_[A-Za-z0-9_-]{8,80}$",
+        "type": "string"
+      },
+      "maxItems": 2,
+      "type": "array",
+      "uniqueItems": true
+    },
+    "policy_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "project_id": {
+      "pattern": "^prj_[A-Za-z0-9_-]{8,80}$",
+      "type": "string"
+    },
+    "provenance_refs": {
+      "maxItems": 100,
+      "type": "array"
+    },
+    "root_object_digest": {
+      "pattern": "^[a-f0-9]{64}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_sha": {
+      "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$",
+      "type": "string"
+    },
+    "source_tree_sha": {
+      "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$",
+      "type": "string"
+    }
+  },
+  "required": [
+    "author_principal_id",
+    "base_revision",
+    "builder_version",
+    "change_summary",
+    "commit_id",
+    "created_at",
+    "device_id",
+    "graph_checksum",
+    "graph_id",
+    "linked_git_commits",
+    "linked_pull_requests",
+    "message",
+    "parent_commit_ids",
+    "policy_digest",
+    "project_id",
+    "provenance_refs",
+    "root_object_digest",
+    "schema_version",
+    "source_sha",
+    "source_tree_sha"
+  ],
+  "type": "object"
+}
