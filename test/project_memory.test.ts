@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { buildGraph, git } from "../src/core/project_memory/builder.js";
+import { buildGraph, git, repositoryRoot } from "../src/core/project_memory/builder.js";
 import { canonical, digest, graphId, type Binding, type Graph, type Manifest, type Receipt, type Remote } from "../src/core/project_memory/contract.js";
 import { ProjectStore } from "../src/core/project_memory/store.js";
 import { pull, push } from "../src/core/project_memory/sync.js";
-import { normalizeMemoryArgs } from "../src/commands/project_memory.js";
+import { normalizeMemoryArgs, resolveMemoryBinding } from "../src/commands/project_memory.js";
 import type { ApiClient } from "../src/core/transport.js";
 import { validateGraph, validateManifest } from "../src/core/project_memory/contract.js";
 import { pinMemory } from "../src/core/project_memory/run.js";
@@ -146,6 +146,8 @@ test("runtime pins never assign an older server revision to unpublished local co
   process.env["AETHER_CONFIG_DIR"] = dirname(root);
   try {
     const ctx = { flags: { cwd: root } } as AppContext;
+    assert.equal(repositoryRoot(root), root, "runtime and fixture must use the same canonical repository root");
+    assert.deepEqual(resolveMemoryBinding(ctx), store.binding, "runtime must locate the fixture binding before pinning it");
     assert.equal(pinMemory(ctx)?.graph_revision, null);
     const first = commit(store, root);
     assert.equal(pinMemory(ctx)?.commit_id, first.commit_id);
@@ -178,6 +180,8 @@ test("runtime pins reject a stale repository, project, or Desktop owner binding"
   try {
     commit(store, root);
     const ctx = { flags: { cwd: root } } as AppContext;
+    assert.equal(repositoryRoot(root), root, "runtime and fixture must use the same canonical repository root");
+    assert.deepEqual(resolveMemoryBinding(ctx), store.binding, "runtime must locate the fixture binding before pinning it");
     assert.ok(pinMemory(ctx));
     process.env["AETHER_PROJECT_MEMORY_OWNER_ID"] = "another-owner";
     assert.equal(pinMemory(ctx), null);
