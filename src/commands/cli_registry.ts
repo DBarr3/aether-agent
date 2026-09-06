@@ -26,6 +26,9 @@ export const CLI_SECTIONS = [...new Set(shellManifest.map((entry) => entry.secti
  * time: a command that shadows a global is a startup error, not a surprise.
  */
 export const GLOBAL_FLAGS: FlagTable = {
+  offline: { type: "boolean", default: false },
+  "graph-file": { type: "string" },
+  "evidence-file": { type: "string" },
   model: { type: "string" },
   agent: { type: "string" },
   cwd: { type: "string" },

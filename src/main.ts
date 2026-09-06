@@ -74,6 +74,8 @@ function suggestTopLevel(token: string): string | null {
 }
 
 export async function main(argv: string[]): Promise<number> {
+  const { normalizeMemoryArguments } = await import("./commands/project_memory.js");
+  argv = normalizeMemoryArguments(argv);
   const nodeError = unsupportedNodeMessage(process.versions.node);
   if (nodeError) {
     process.stderr.write(`${errTheme.red("✗")} ${nodeError}\n`);
@@ -190,7 +192,9 @@ export async function main(argv: string[]): Promise<number> {
     }
     case "memory": {
       const { cmdMemory } = await import("./commands/memory.js");
-      return cmdMemory(ctx, rest, { apply: Boolean(values["apply"]) });
+      return cmdMemory(ctx, rest, { apply: Boolean(values["apply"]), project: sf(values["project"]),
+        offline: Boolean(values["offline"]), noOpen: Boolean(values["no-open"]), message: sf(values["message"]),
+        graphFile: sf(values["graph-file"]), evidenceFile: sf(values["evidence-file"]) });
     }
     case "image":
     case "img":

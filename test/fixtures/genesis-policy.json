@@ -1,0 +1,41 @@
+{
+  "version": "apr-genesis/v1",
+  "max_files": 5000,
+  "max_bytes": 32000000,
+  "max_file_bytes": 1000000,
+  "excerpts": false,
+  "symlinks": false,
+  "max_runtime_seconds": 180,
+  "max_path_depth": 64,
+  "denied_suffixes": [
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".webp",
+    ".pdf",
+    ".zip",
+    ".gz",
+    ".mp4",
+    ".mp3",
+    ".woff",
+    ".woff2",
+    ".ttf",
+    ".exe",
+    ".dll",
+    ".so",
+    ".bin",
+    ".pyc"
+  ],
+  "denied_segments": [
+    ".git",
+    "node_modules",
+    "vendor",
+    "dist",
+    "build",
+    ".cache",
+    "__pycache__",
+    ".venv",
+    "venv"
+  ]
+}

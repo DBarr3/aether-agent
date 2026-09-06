@@ -16,6 +16,12 @@ import {
 export interface MemoryCommandOptions {
   out?: Writable;
   apply?: boolean;
+  project?: string;
+  offline?: boolean;
+  noOpen?: boolean;
+  message?: string;
+  graphFile?: string;
+  evidenceFile?: string;
 }
 
 // Mirrors the MemoryTier union in ../core/memory.ts and the error text
@@ -84,6 +90,11 @@ export async function cmdMemory(
 ): Promise<number> {
   const out = options.out ?? process.stdout;
   const sub = (argv[0] ?? "status").toLowerCase();
+  if (!["inspect", "forget", "prune"].includes(sub) &&
+      (sub !== "status" || options.project || process.env["AETHER_PROJECT_ID"])) {
+    const { cmdProjectMemory } = await import("./project_memory.js");
+    return cmdProjectMemory(ctx, argv, options);
+  }
   try {
     if (sub === "status") {
       const report = await reportForContext(ctx);
