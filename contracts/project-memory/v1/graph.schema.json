@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "edges": {
+      "items": {
+        "allOf": [
+          {
+            "properties": {
+              "id": {
+                "pattern": "^[A-Za-z0-9_:-]{1,160}$",
+                "type": "string"
+              },
+              "kind": {
+                "type": "string"
+              },
+              "provenance": {
+                "maxItems": 20,
+                "minItems": 1,
+                "type": "array"
+              },
+              "schema_version": {
+                "const": 1
+              },
+              "sensitivity": {
+                "enum": [
+                  "internal",
+                  "public",
+                  "restricted"
+                ]
+              },
+              "tombstone": {
+                "type": "boolean"
+              },
+              "visibility": {
+                "enum": [
+                  "project",
+                  "private"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "kind",
+              "schema_version",
+              "provenance",
+              "tombstone",
+              "visibility",
+              "sensitivity"
+            ],
+            "type": "object"
+          },
+          {
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "target"
+            ]
+          }
+        ]
+      },
+      "maxItems": 20000,
+      "type": "array"
+    },
+    "nodes": {
+      "items": {
+        "properties": {
+          "id": {
+            "pattern": "^[A-Za-z0-9_:-]{1,160}$",
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "provenance": {
+            "maxItems": 20,
+            "minItems": 1,
+            "type": "array"
+          },
+          "schema_version": {
+            "const": 1
+          },
+          "sensitivity": {
+            "enum": [
+              "internal",
+              "public",
+              "restricted"
+            ]
+          },
+          "tombstone": {
+            "type": "boolean"
+          },
+          "visibility": {
+            "enum": [
+              "project",
+              "private"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "schema_version",
+          "provenance",
+          "tombstone",
+          "visibility",
+          "sensitivity"
+        ],
+        "type": "object"
+      },
+      "maxItems": 10000,
+      "type": "array"
+    },
+    "partial": {
+      "type": "boolean"
+    },
+    "policy": {
+      "properties": {
+        "content_excerpts": {
+          "const": false
+        }
+      },
+      "required": [
+        "content_excerpts"
+      ],
+      "type": "object"
+    },
+    "project_id": {
+      "pattern": "^prj_[A-Za-z0-9_-]{8,80}$",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1
+    },
+    "source_tree_sha": {
+      "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$",
+      "type": "string"
+    },
+    "truncation_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "project_id",
+    "source_tree_sha",
+    "nodes",
+    "edges",
+    "partial",
+    "truncation_reasons",
+    "policy"
+  ],
+  "type": "object"
+}

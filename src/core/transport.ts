@@ -177,7 +177,7 @@ export class ApiClient {
   ): Promise<boolean> {
     throwIfAborted(signal);
     if (failedPath.startsWith("/auth/")) return false;
-    if (!usedToken || isApiKeyToken(usedToken)) return false;
+    if (!usedToken || isApiKeyToken(usedToken) || usedToken.startsWith("agt_")) return false;
     // Same fail-closed rule as authHeaders(): never POST a session token over
     // an insecure transport — not even to refresh it.
     if (!isCredentialSafeUrl(this.baseUrl)) return false;

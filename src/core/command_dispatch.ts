@@ -114,7 +114,7 @@ export function validateDispatchTable(
 }
 
 /** Global flags + every command's flags, as one `parseArgs` options object. */
-export function mergeFlagTables(reserved: FlagTable, commands: readonly DispatchedCommand[]): Record<string, FlagSpec> {
+export function mergeFlagTables(reserved: FlagTable, commands: readonly Pick<DispatchedCommand, "flags">[]): Record<string, FlagSpec> {
   const merged: Record<string, FlagSpec> = { ...reserved };
   for (const command of commands) for (const [name, spec] of Object.entries(command.flags ?? {})) merged[name] ??= spec;
   return merged;

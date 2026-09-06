@@ -1,0 +1,2 @@
+# Keep development source maps in the checkout, outside the production package.
+**/*.map

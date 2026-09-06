@@ -285,7 +285,7 @@ const registryErrors = [
 if (registryErrors.length) throw new Error(`Invalid CLI registry: ${registryErrors.join("; ")}`);
 
 /** The single `parseArgs` options object: globals plus every command's flags. */
-export const CLI_PARSE_OPTIONS = mergeFlagTables(GLOBAL_FLAGS, DISPATCH_COMMANDS);
+export const CLI_PARSE_OPTIONS = mergeFlagTables(GLOBAL_FLAGS, shellManifest.map((entry) => ({ flags: entry.ownedFlags })));
 
 export const findDispatchedCliCommand = (name: string): DispatchedCommand | undefined =>
   findDispatchedCommand(DISPATCH_COMMANDS, name);

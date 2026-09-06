@@ -8,6 +8,7 @@
 // and cloud are indistinguishable UX.
 
 import type { AppContext } from "../core/context.js";
+import { completeMemory, pinMemory } from "../core/project_memory/run.js";
 import type { Brain, TaskCommand } from "../core/brain.js";
 import type { BrainEvent } from "../core/brain_protocol.js";
 import type { RunOptions, ToolResult } from "../core/tool_executor.js";
@@ -614,6 +615,9 @@ export async function cmdCode(ctx: AppContext, task: string, opts: CodeOpts): Pr
   }
 
   const poolGb = opts.pool > 0 ? opts.pool : 5;
+  const memoryContext = { ...ctx, flags: { ...ctx.flags, cwd } };
+  const pinnedMemory = process.env["AETHER_PROJECT_MEMORY_RECEIPTS_ENABLED"] === "1" ? pinMemory(memoryContext) : null;
+  if (ctx.flags.json && pinnedMemory) process.stdout.write(JSON.stringify({ type: "project_memory_pinned", ...pinnedMemory }) + "\n");
   // --local forces the local brain. Otherwise honor the backend preference
   // (AETHER_BACKEND env > config.backend > 'auto'); 'auto' is local-first, so an
   // unauthed user gets the local brain and a signed-in user keeps the cloud default.
@@ -984,6 +988,11 @@ export async function cmdCode(ctx: AppContext, task: string, opts: CodeOpts): Pr
     process.stderr.write("\n  " + runSummary(summaryStatus, remaining, touched.size, secs) + "\n");
   }
   if (log) process.stderr.write(`  ⤷ log: ${log.dir}\n`);
+  if (process.env["AETHER_PROJECT_MEMORY_RECEIPTS_ENABLED"] === "1") {
+    const memory = await completeMemory(memoryContext, pinnedMemory, outcome.state === "succeeded");
+    if (ctx.flags.json) process.stdout.write(JSON.stringify({ type: "project_memory_status", text: memory }) + "\n");
+    else process.stderr.write(`  ${memory}\n`);
+  }
   if (worktree) process.stderr.write(mergeHint(worktree));
   if (repoSpec && worktree) {
     // This used to be `process.stderr.write(prCreateHint(...))` — a printed gh
