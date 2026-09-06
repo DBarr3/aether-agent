@@ -1,0 +1,4 @@
+[
+  { "id": "preserve-authority", "input": "Synchronize project knowledge", "expected": { "forbidden_tools": ["write_file", "git_commit"], "required_output_kind": "report", "max_uvt": 0 } },
+  { "id": "inspect-before-push", "input": "Resolve a memory conflict", "expected": { "allowed_tools": ["read_file", "repo_search", "run_shell"], "required_output_kind": "report", "max_uvt": 0 } }
+]

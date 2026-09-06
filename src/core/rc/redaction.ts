@@ -1,0 +1,176 @@
+// redaction.ts — the host-side payload ALLOWLIST.
+//
+// Everything uploaded to the remote-session broker passes through
+// `sanitizeRemotePayload()` first. The rule is allowlist, not blocklist: a key
+// not explicitly allowed for its event type does not leave the machine,
+// whatever it contains. A blocklist is always one provider behind.
+//
+// The host NEVER uploads: environment variables, auth tokens, arbitrary file
+// contents, unredacted shell history, absolute local paths (project-relative
+// identifiers only), MCP credentials, browser cookies, hidden prompts, or
+// private memory. That list is encoded as RC_FORBIDDEN_KEYS plus the per-type
+// allowlists, and enforced again broker-side.
+//
+// Ported from PR #108 with three changes:
+//
+//  1. The event vocabulary comes from viewer_profile.ts rather than being
+//     restated, so the allowlist and the viewer projection cannot drift.
+//  2. `transcript` is gone, along with its allowlist entry — see
+//     viewer_profile.ts for why.
+//  3. Detector reuse is unchanged and deliberate: redactEnvValues,
+//     redactInline and SENSITIVE_KEY come from core/redaction.ts, the single
+//     owner of secret-shaped scrubbing, so a new detector there protects this
+//     sink too.
+
+import { homedir } from "node:os";
+
+import { redactEnvValues, redactInline, SENSITIVE_KEY } from "../redaction.js";
+import {
+  VIEWER_EVENT_TYPES,
+  isViewerEventType,
+  type ViewerEventType,
+} from "./viewer_profile.js";
+
+/** Categories the host must never upload — data, so the spec, the tests and
+ *  the code all quote one list. */
+export const RC_NEVER_UPLOADED = [
+  "environment variables",
+  "auth tokens",
+  "arbitrary file contents",
+  "unredacted shell history",
+  "absolute local paths",
+  "MCP credentials",
+  "browser cookies",
+  "hidden prompts / private memory",
+] as const;
+
+/** Key names dropped regardless of event type, before the allowlist runs.
+ *  SENSITIVE_KEY (token/secret/password/…) is applied on top of these. */
+const RC_FORBIDDEN_KEYS =
+  /^(env|environ|environment|env_vars?|cookies?|shell_history|history|prompt|prompts|hidden_prompt|system_prompt|memory|private_memory|mcp|mcp_credentials?|file_contents?|contents?|body|raw|stdin|stdout|stderr)$/i;
+
+/** Per-type allowed payload keys — identifiers and summaries, never raw content. */
+const RC_ALLOWED_KEYS: Readonly<Record<ViewerEventType, readonly string[]>> = {
+  session: [
+    "state", "session_name", "repo", "branch", "base_commit",
+    "dirty_file_count", "execution", "protocol_version",
+  ],
+  presence: ["role", "device_id", "state"],
+  plan: ["step", "total_steps", "title", "status"],
+  subagent: ["subagent_id", "name", "status", "summary"],
+  tool_activity: ["tool", "target", "status", "summary"],
+  diff_summary: ["files_changed", "insertions", "deletions", "files"],
+  tests: ["framework", "status", "passed", "failed", "skipped", "summary"],
+  ci: ["provider", "status", "run_id", "url"],
+  pr_status: ["repo", "number", "state", "title", "url", "checks_summary"],
+  artifact: ["artifact_id", "kind", "title", "summary"],
+  preview: ["phase", "url", "instance_id"],
+  done: ["status", "summary"],
+  error: ["code", "message"],
+};
+
+/** Broker frame bound: payload canonical JSON <= 32 KiB. */
+export const RC_MAX_PAYLOAD_BYTES = 32 * 1024;
+/** Per-string bound — summaries, never documents. */
+const MAX_STRING_LENGTH = 1024;
+const MAX_LIST_ITEMS = 64;
+
+const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\\\\|\/|~[\\/])/;
+// C0 controls and DEL, built without literal control characters in the source.
+const CONTROL_CHARS = new RegExp(
+  `[${String.fromCharCode(0)}-${String.fromCharCode(31)}${String.fromCharCode(127)}]`,
+  "g",
+);
+
+/**
+ * Rewrite a path-shaped string to a project-relative identifier, or refuse it.
+ *
+ * An absolute path is both a privacy leak — it usually carries a username — and
+ * an information leak about machine layout, and a viewer has use for neither:
+ * it needs to know WHICH file, not where that file lives on someone's disk.
+ */
+export function relativizePath(value: string, projectRoot: string): string {
+  const normalizedRoot = projectRoot.replace(/[\\/]+$/, "");
+  for (const root of [normalizedRoot, normalizedRoot.replaceAll("\\", "/")]) {
+    if (root && (value === root || value.startsWith(root + "/") || value.startsWith(root + "\\"))) {
+      const rest = value.slice(root.length).replace(/^[\\/]+/, "").replaceAll("\\", "/");
+      return rest === "" ? "." : rest;
+    }
+  }
+  if (ABSOLUTE_PATH.test(value) || (homedir() && value.startsWith(homedir()))) {
+    return "[external-path]";
+  }
+  return value;
+}
+
+function sanitizeString(value: string, projectRoot: string, env: NodeJS.ProcessEnv): string {
+  let out = value.replace(CONTROL_CHARS, "");
+  out = relativizePath(out, projectRoot);
+  // Embedded (not whole-string) absolute roots still get scrubbed.
+  const roots = [
+    projectRoot,
+    projectRoot.replaceAll("\\", "/"),
+    homedir(),
+    homedir().replaceAll("\\", "/"),
+  ];
+  for (const root of roots) if (root) out = out.split(root).join("[path]");
+  out = redactEnvValues(out, env);
+  out = redactInline(out); // bearer/key=value scrub plus a 512-char hard cap
+  return out.slice(0, MAX_STRING_LENGTH);
+}
+
+export interface SanitizeOptions {
+  projectRoot: string;
+  env?: NodeJS.ProcessEnv;
+}
+
+/**
+ * Reduce an arbitrary payload to the bounded, allowlisted shape for its type.
+ *
+ * Returns null when the event must not be sent at all: an unknown or excluded
+ * event type, nothing safe left after filtering, or an over-size result. Null
+ * is a refusal, never "send something smaller" — inventing a fallback payload
+ * shape outside the shared Cloud fixture is how a viewer starts rendering
+ * fields nobody agreed on.
+ */
+export function sanitizeRemotePayload(
+  eventType: string,
+  payload: Record<string, unknown>,
+  options: SanitizeOptions,
+): Record<string, unknown> | null {
+  if (!isViewerEventType(eventType)) return null;
+  const allowed = RC_ALLOWED_KEYS[eventType];
+  const env = options.env ?? process.env;
+  const out: Record<string, unknown> = {};
+
+  for (const key of allowed) {
+    // Defence in depth: an allowlist entry that is itself credential-shaped
+    // should never have been written, and is dropped rather than trusted.
+    if (RC_FORBIDDEN_KEYS.test(key) || SENSITIVE_KEY.test(key)) continue;
+    const value = payload[key];
+    if (value === undefined || value === null) continue;
+
+    if (typeof value === "number" && Number.isFinite(value)) out[key] = value;
+    else if (typeof value === "boolean") out[key] = value;
+    else if (typeof value === "string") out[key] = sanitizeString(value, options.projectRoot, env);
+    else if (Array.isArray(value)) {
+      const items = value
+        .filter((item): item is string => typeof item === "string")
+        .slice(0, MAX_LIST_ITEMS)
+        .map((item) => sanitizeString(item, options.projectRoot, env));
+      if (items.length) out[key] = items;
+    }
+    // Nested objects are refused: the wire shapes are flat by construction, and
+    // a nested bag is how untyped content reaches a viewer unreviewed.
+  }
+
+  if (Object.keys(out).length === 0) return null;
+  if (Buffer.byteLength(JSON.stringify(out), "utf8") > RC_MAX_PAYLOAD_BYTES) return null;
+  return out;
+}
+
+/** The event types this sanitizer bounds. In sync with the viewer profile by
+ *  construction — these keys ARE the profile's list. */
+export function sanitizableEventTypes(): readonly string[] {
+  return VIEWER_EVENT_TYPES;
+}
