@@ -6,12 +6,14 @@ import { memoryFooter } from "./receipt.js";
 import { push } from "./sync.js";
 
 /** Host pins a local revision once; subsequent commits cannot rewrite it. */
-export function pinMemory(ctx: AppContext): Readonly<{ project_id: string; commit_id: string | null; graph_revision: number; graph_checksum: string | null }> | null {
+export function pinMemory(ctx: AppContext): Readonly<{ project_id: string; commit_id: string | null; graph_revision: number | null; graph_checksum: string | null }> | null {
   try {
     const binding = cachedBinding(repositoryRoot(ctx.flags.cwd));
     if (!binding) return null;
     const store = new ProjectStore(binding), state = store.state();
-    return Object.freeze({ project_id: binding.project_id, commit_id: state.head, graph_revision: state.remote.revision,
+    // Revisions belong to a specific server commit, never to its local child.
+    const revision = state.head && state.head === state.remote.commit_id ? state.remote.revision : null;
+    return Object.freeze({ project_id: binding.project_id, commit_id: state.head, graph_revision: revision,
       graph_checksum: state.head ? store.manifest(state.head).graph_checksum : null });
   } catch { return null; }
 }

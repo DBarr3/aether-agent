@@ -10,6 +10,9 @@ import { pull, push } from "../src/core/project_memory/sync.js";
 import { normalizeMemoryArgs } from "../src/commands/project_memory.js";
 import type { ApiClient } from "../src/core/transport.js";
 import { validateGraph, validateManifest } from "../src/core/project_memory/contract.js";
+import { pinMemory } from "../src/core/project_memory/run.js";
+import type { AppContext } from "../src/core/context.js";
+import { dirname } from "node:path";
 
 const project = "prj_12345678";
 test("TypeScript consumes the same canonical contract bytes as Gateway", () => {
@@ -132,6 +135,35 @@ test("push then second-device pull preserves exact revision and receipt", async 
   assert.equal(second.store.state().head, m.commit_id);
   assert.equal(second.store.state().receipt?.revision, 1);
   assert.equal(git(first.root, ["rev-parse", "HEAD"]), originalGit);
+});
+
+test("runtime pins never assign an older server revision to unpublished local content", async () => {
+  const { root, store } = fixture(), server = new Server();
+  const previous = process.env["AETHER_CONFIG_DIR"];
+  process.env["AETHER_CONFIG_DIR"] = dirname(root);
+  try {
+    const ctx = { flags: { cwd: root } } as AppContext;
+    assert.equal(pinMemory(ctx)?.graph_revision, null);
+    const first = commit(store, root);
+    assert.equal(pinMemory(ctx)?.commit_id, first.commit_id);
+    assert.equal(pinMemory(ctx)?.graph_revision, null);
+    await store.locked(() => push(store, server.api));
+    assert.equal(pinMemory(ctx)?.graph_revision, 1);
+    const frozen = pinMemory(ctx)!;
+    writeFileSync(join(root, "next.ts"), "export const next = 1;\n");
+    git(root, ["add", "."]); git(root, ["commit", "-m", "next"]);
+    const second = commit(store, root);
+    const local = pinMemory(ctx)!;
+    assert.equal(local.commit_id, second.commit_id);
+    assert.equal(local.graph_checksum, second.graph_checksum);
+    assert.equal(local.graph_revision, null);
+    assert.equal(frozen.commit_id, first.commit_id);
+    assert.equal(frozen.graph_revision, 1);
+    assert.ok(Object.isFrozen(frozen));
+  } finally {
+    if (previous === undefined) delete process.env["AETHER_CONFIG_DIR"];
+    else process.env["AETHER_CONFIG_DIR"] = previous;
+  }
 });
 
 test("two-device divergence preserves both commits and rejects overwrite", async () => {
