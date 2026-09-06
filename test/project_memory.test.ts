@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { buildGraph, git } from "../src/core/project_memory/builder.js";
@@ -28,7 +28,10 @@ test("TypeScript consumes the same canonical contract bytes as Gateway", () => {
 });
 function fixture(): { root: string; store: ProjectStore; binding: Binding } {
   const data = mkdtempSync(join(tmpdir(), "apr-memory-"));
-  const root = join(data, "repo"); mkdirSync(root);
+  const fixtureRoot = join(data, "repo"); mkdirSync(fixtureRoot);
+  // Windows runners can expose an 8.3 TEMP alias. Persist the same canonical
+  // root that the real CLI resolves before caching a project binding.
+  const root = realpathSync(fixtureRoot);
   git(root, ["init"]);
   git(root, ["config", "user.name", "Test"]); git(root, ["config", "user.email", "test@example.invalid"]);
   git(root, ["remote", "add", "origin", "https://github.com/test/repo.git"]);
