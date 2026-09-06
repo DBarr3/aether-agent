@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "aether/apr-project-memory",
+  "version": "1.0.0",
+  "name": "APR Project Memory",
+  "description": "Inspect pinned project knowledge, preserve local changes during sync, record verified facts, and report exact cloud receipts or explicit conflicts.",
+  "entrypoint": "SKILL.md",
+  "triggers": { "commands": ["apr-project-memory"], "phrases": [], "automatic": false },
+  "tools": { "allowed": ["read_file", "repo_search", "run_shell"], "required": [], "denied": ["write_file", "git_commit"] },
+  "permissions": { "requires": ["workspace.read"], "may_request": ["shell.execute", "network.general"], "forbids": ["secrets.read", "git.push"] },
+  "context": { "max_tokens": 1600, "resources": [] },
+  "outputs": { "kinds": ["report"], "verification": ["report the exact memory receipt or explicit non-success state"] },
+  "dependencies": { "skills": [] },
+  "compatibility": { "min_agent_version": "0.3.2", "capability_contract": 1 },
+  "health": { "eval_manifest": "evals/cases.json" }
+}

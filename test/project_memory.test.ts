@@ -97,14 +97,28 @@ test("canonical JSON rejects floats and lone surrogates and sorts keys", () => {
 test("deterministic Git builder excludes secrets, ignored and binary files without source contents", () => {
   const { root } = fixture();
   writeFileSync(join(root, ".env"), "SENTINEL_CREDENTIAL=unsafe");
-  writeFileSync(join(root, ".gitignore"), "ignored.txt\n");
+  writeFileSync(join(root, ".gitignore"), "ignored.txt\nnested/*\n!nested/.gitignore\n!nested/keep.txt\n");
   writeFileSync(join(root, "ignored.txt"), "ignored"); writeFileSync(join(root, "file.png"), Buffer.alloc(20));
-  git(root, ["add", "-f", ".env", ".gitignore", "ignored.txt", "file.png"]); git(root, ["commit", "-m", "fixtures"]);
+  mkdirSync(join(root, "nested"));
+  writeFileSync(join(root, "nested", ".gitignore"), "*.tmp\n!important.tmp\n");
+  writeFileSync(join(root, "nested", "drop.txt"), "ignored"); writeFileSync(join(root, "nested", "keep.txt"), "visible");
+  writeFileSync(join(root, "nested", "drop.tmp"), "ignored"); writeFileSync(join(root, "nested", "important.tmp"), "visible");
+  git(root, ["add", "-f", ".env", ".gitignore", "ignored.txt", "file.png", "nested/.gitignore", "nested/drop.txt", "nested/keep.txt", "nested/drop.tmp", "nested/important.tmp"]); git(root, ["commit", "-m", "fixtures"]);
+  // Dirty and machine-local ignore inputs must not change immutable HEAD.
+  writeFileSync(join(root, ".gitignore"), "README.md\n");
+  writeFileSync(join(root, ".git", "info", "exclude"), "README.md\n");
+  const excludes = join(dirname(root), "machine-excludes");
+  writeFileSync(excludes, "README.md\n");
+  git(root, ["config", "core.excludesFile", excludes]);
   const first = buildGraph(root, project), second = buildGraph(root, project);
   assert.equal(digest(first.graph), digest(second.graph));
   assert.ok(!canonical(first.graph).includes("SENTINEL_CREDENTIAL"));
   const locators = first.graph.nodes.map((n) => n["locator"]);
   assert.ok(!locators.includes(".env") && !locators.includes("ignored.txt") && !locators.includes("file.png"));
+  assert.ok(!locators.includes("nested/drop.txt"));
+  assert.ok(!locators.includes("nested/drop.tmp"));
+  assert.ok(locators.includes("nested/keep.txt"));
+  assert.ok(locators.includes("nested/important.tmp"));
   assert.ok(locators.includes("README.md"));
 });
 
