@@ -1,0 +1,40 @@
+{
+  "schema": "aether.code.fixture-manifest/1",
+  "protocol": "aether.code.host/1",
+  "exec_protocol": "aether.exec/2",
+  "control_protocol": "aether.exec.control/2",
+  "digest_algorithm": "sha256(sorted(path + NUL + raw_file_sha256 + LF))",
+  "files": [
+    {
+      "path": "completion-ordering.json",
+      "bytes": 4239,
+      "sha256": "7b600f40cdcddf5d784f87ec82800a96feda07253cf9b03de015cba86b0409a7",
+      "cases": 6
+    },
+    {
+      "path": "controls.jsonl",
+      "bytes": 3200,
+      "sha256": "269c0c67dcca5eb92aef1e438fdae742a6f51f94bf60ea831d3a2152b3430269",
+      "cases": 9
+    },
+    {
+      "path": "handshake.jsonl",
+      "bytes": 6143,
+      "sha256": "9e57d0312d99e43f777efb51d1877a6e68abae5f09878c91d1ce6cfe556e9226",
+      "cases": 10
+    },
+    {
+      "path": "host-actions.jsonl",
+      "bytes": 4115,
+      "sha256": "87b154120abb2439f08794f543222e4f5a143295e4775097cf0a38c5b06184af",
+      "cases": 8
+    },
+    {
+      "path": "secret-boundary.jsonl",
+      "bytes": 3984,
+      "sha256": "1152ab2d57104a82a2d758bf0a4a1b71aa04dc27b944bee69e0b435e53fde322",
+      "cases": 6
+    }
+  ],
+  "bundle_sha256": "924f6f3d26cd052020d226d0c07828416f75f8245677b028efd7815d346f03c0"
+}

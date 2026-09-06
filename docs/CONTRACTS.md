@@ -132,6 +132,11 @@ History:
 
 ## Other contracts
 
+- **Aether Code private host protocol** (`aether.code.host/1`): canonical
+  supervision, handshake, credential-boundary, and host-action contract is
+  [`AETHER_CODE_HOST_PROTOCOL.md`](./AETHER_CODE_HOST_PROTOCOL.md). It explicitly
+  reuses the unchanged `aether.exec/2` execution stream and
+  `aether.exec.control/2` control stream.
 - **Universal UVT stream** (chat/orchestrator/MCP SSE): owned by the Aether
   platform; surfaced here by `src/core/stream.ts`. The bridge's `CloudBrain` maps
   that vocabulary onto the event protocol above.
