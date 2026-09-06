@@ -154,6 +154,45 @@ export function loadEnrollment(): EnrollmentRecord | null {
   }
 }
 
+/**
+ * Identity and display fields only — never the secrets.
+ *
+ * Remote Control needs to say WHICH device is publishing: `device_id` for the
+ * canonical identity the broker checks, `display_name` for the operator, and
+ * `base_url` for the endpoint. It has no use for `device_token` or
+ * `device_command_key`, and it must not hold them: RC is the process that
+ * publishes observation events, so a credential within its reach is one
+ * redaction bug away from a viewer stream.
+ *
+ * This is a separate accessor rather than "call loadEnrollment and read only
+ * three fields", because the latter is a convention and a convention is not
+ * enforceable. A projection is: test/rc_enrollment_metadata.test.ts asserts no
+ * RC module references `loadEnrollment`, `device_token`, or
+ * `device_command_key` at all — which is only fair to demand once a
+ * secret-free accessor exists for them to use instead.
+ */
+export interface EnrollmentMetadata {
+  device_id: string;
+  display_name: string;
+  base_url: string;
+  enrolled_at: number;
+}
+
+export function loadEnrollmentMetadata(): EnrollmentMetadata | null {
+  const record = loadEnrollment();
+  if (!record) return null;
+  // Explicit field-by-field projection, deliberately not a destructuring rest.
+  // A rest spread would silently carry any future secret added to
+  // EnrollmentRecord into RC's reach; this way a new field has to be allowed
+  // here on purpose.
+  return {
+    device_id: record.device_id,
+    display_name: record.display_name,
+    base_url: record.base_url,
+    enrolled_at: record.enrolled_at,
+  };
+}
+
 export function saveEnrollment(record: EnrollmentRecord): void {
   writeSecretJson(enrollmentPath(), record);
 }
