@@ -30,6 +30,11 @@ function copyTree(source: string, destination: string): number {
 }
 
 function main(): void {
+  // npm honours nested ignore files within an allowlisted directory. Runtime
+  // maps reference TypeScript sources that are not shipped; retain them only
+  // in the development build while keeping the production footprint bounded.
+  mkdirSync(join(repoRoot, "dist", "src"), { recursive: true });
+  copyFileSync(join(repoRoot, "src", ".npmignore"), join(repoRoot, "dist", "src", ".npmignore"));
   if (!existsSync(sourceRoot)) {
     process.stdout.write("no built-in skills at " + sourceRoot + " — nothing to copy\n");
     return;
